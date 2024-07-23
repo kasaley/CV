@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "mobx": "^6.13.1",
-    "numjs": "^0.16.1",
     "vite-plugin-wasm": "^3.3.0"
   }
 }
