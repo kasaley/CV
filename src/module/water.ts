@@ -1,7 +1,7 @@
 
 
 export const initWaterModule = () => {
-  return import('../wasm/pkg/water_simulation').then(wasm => {
+  return import('../pkg/water_simulation').then(wasm => {
       const canvas = document.getElementById('water') as HTMLCanvasElement;
       const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
       if(!ctx || !canvas) {
