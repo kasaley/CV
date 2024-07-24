@@ -1,128 +1,120 @@
-// Получаем элемент canvas и его контекст
-const canvas = document.getElementById('arc-game');
-const ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+import animationButtonStore from "../store/animationButtonStore";
 
-// Константы для физики
-const gravity = 0.5; // Гравитация
-const airResistance = 0.99; // Сопротивление воздуха
-const initialBallRadius = 20; // Начальный радиус мяча
-const minBallRadius = 5; // Минимальный радиус мяча
-const ballColor = 'red'; // Цвет мяча
-const elasticityFactor = 0.8; // Коэффициент упругости
+const canvas = document.getElementById('arc-game') as HTMLCanvasElement;
+const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 
-// Объект мяча
-let ball = {
-  x: canvas.width / 2, // Начальная позиция по оси X
-  y: canvas.height / 2, // Начальная позиция по оси Y
-  vx: 0, // Скорость по оси X
-  vy: 0, // Скорость по оси Y
-  radius: initialBallRadius, // Радиус мяча
-  isDragging: false, // Флаг для перетаскивания
-  isMouseDown: false, // Флаг для нажатия мыши
-  lastMouseX: 0, // Последняя позиция мыши по X
-  lastMouseY: 0, // Последняя позиция мыши по Y
-  lastMouseTime: 0 // Последнее время движения мыши
+const canvasWidth = canvas.width;
+const canvasHeight = canvas.height;
+const PI2 = Math.PI * 2;
+
+interface Element {
+    x: number;
+    y: number;
+    radius: number;
+    vx: number;
+    vy: number;
+}
+
+const element: Element = { x: 400, y: 300, radius: 20, vx: 0, vy: 0 };
+
+// Параметры конфигурации
+interface Config {
+    gravity: number;
+    damping: number;
+    bounce: number;
+    maxSpeed: number;
+    scale: number;
+    threshold: number;
+}
+
+const config: Config = {
+    gravity: 1,
+    damping: 0.99,
+    bounce: 0.98,
+    maxSpeed: 20,
+    scale: 20,
+    threshold: 0.01, // Порог для определения состояния покоя
 };
 
-// Функция для рисования мяча
-function drawBall() {
-  ctx.beginPath();
-  ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2, false);
-  ctx.fillStyle = ballColor;
-  ctx.fill();
-  ctx.closePath();
+function drawElement(): void {
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    ctx.beginPath();
+    ctx.arc(element.x, element.y, element.radius, 0, PI2);
+    ctx.fillStyle = 'red';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetX = 5;
+    ctx.shadowOffsetY = 5;
+    ctx.fill();
+    ctx.closePath();
 }
 
-// Функция для обновления физики мяча
-function updatePhysics() {
-  if (!ball.isDragging) {
-    ball.vy += gravity; // Применение гравитации
-    ball.vx *= airResistance; // Применение сопротивления воздуха
-    ball.vy *= airResistance;
+function updateElement(): void {
+    if (Math.abs(element.vx) > config.threshold || Math.abs(element.vy) > config.threshold) {
+        element.vy += config.gravity;
+        element.x += element.vx;
+        element.y += element.vy;
 
-    ball.x += ball.vx; // Обновление позиции по X
-    ball.y += ball.vy; // Обновление позиции по Y
+        element.vx *= config.damping;
+        element.vy *= config.damping;
 
-    // Проверка столкновения с полом и потолком
-    if (ball.y + ball.radius > canvas.height) {
-      ball.y = canvas.height - ball.radius;
-      ball.vy = -ball.vy * elasticityFactor;
-      ball.radius = Math.max(minBallRadius, initialBallRadius * (1 - Math.abs(ball.vy) / 20));
-    } else if (ball.y - ball.radius < 0) {
-      ball.y = ball.radius;
-      ball.vy = -ball.vy * elasticityFactor;
-      ball.radius = Math.max(minBallRadius, initialBallRadius * (1 - Math.abs(ball.vy) / 20));
+        // Столкновение с границами canvas
+        handleCollision();
+
+        drawElement();
+    }
+}
+
+function handleCollision(): void {
+    if (element.x + element.radius > canvasWidth) {
+        element.x = canvasWidth - element.radius;
+        element.vx = -element.vx * config.bounce;
+    } else if (element.x - element.radius < 0) {
+        element.x = element.radius;
+        element.vx = -element.vx * config.bounce;
     }
 
-    // Проверка столкновения со стенами
-    if (ball.x + ball.radius > canvas.width) {
-      ball.x = canvas.width - ball.radius;
-      ball.vx = -ball.vx * elasticityFactor;
-      ball.radius = Math.max(minBallRadius, initialBallRadius * (1 - Math.abs(ball.vx) / 20));
-    } else if (ball.x - ball.radius < 0) {
-      ball.x = ball.radius;
-      ball.vx = -ball.vx * elasticityFactor;
-      ball.radius = Math.max(minBallRadius, initialBallRadius * (1 - Math.abs(ball.vx) / 20));
+    if (element.y + element.radius > canvasHeight) {
+        element.y = canvasHeight - element.radius;
+        element.vy = -element.vy * config.bounce;
+    } else if (element.y - element.radius < 0) {
+        element.y = element.radius;
+        element.vy = -element.vy * config.bounce;
     }
+}
 
-    // Постепенное восстановление радиуса мяча
-    if (ball.radius < initialBallRadius) {
-      ball.radius += (initialBallRadius - ball.radius) * 0.1;
+function calculateVelocity(clickX: number, clickY: number): void {
+    const dx = clickX - element.x;
+    const dy = clickY - element.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx);
+
+    const speed = Math.min(distance / 10, config.maxSpeed);
+    element.vx = -(speed * Math.cos(angle)) * config.scale;
+    element.vy = speed * Math.sin(angle) * config.scale;
+}
+
+function isClickInsideElement(clickX: number, clickY: number): boolean {
+    const dx = clickX - element.x;
+    const dy = clickY - element.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    return distance <= element.radius;
+}
+
+canvas.addEventListener('mousedown', (event: MouseEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+
+    if (isClickInsideElement(clickX, clickY)) {
+        calculateVelocity(clickX, clickY);
     }
-  }
-}
-
-// Функция для очистки canvas
-function clearCanvas() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-}
-
-// Функция для анимации
-export function animate() {
-  clearCanvas();
-  drawBall();
-  updatePhysics();
-  requestAnimationFrame(animate);
-}
-
-// Обработчик события нажатия мыши
-canvas.addEventListener('mousedown', (e) => {
-  const dx = e.clientX - ball.x;
-  const dy = e.clientY - ball.y;
-  if (dx * dx + dy * dy <= ball.radius * ball.radius) {
-    ball.isDragging = true;
-    ball.isMouseDown = true;
-    ball.vx = 0;
-    ball.vy = 0;
-    ball.offsetX = dx;
-    ball.offsetY = dy;
-    ball.lastMouseX = e.clientX;
-    ball.lastMouseY = e.clientY;
-    ball.lastMouseTime = Date.now();
-  }
 });
 
-// Обработчик события движения мыши
-canvas.addEventListener('mousemove', (e) => {
-  if (ball.isDragging && ball.isMouseDown) {
-    const now = Date.now();
-    const deltaTime = (now - ball.lastMouseTime) / 1000; // время в секундах
-    if (deltaTime > 0) {
-      ball.vx = (e.clientX - ball.lastMouseX) / deltaTime * 0.006;
-      ball.vy = (e.clientY - ball.lastMouseY) / deltaTime  * 0.006;
-      ball.lastMouseX = e.clientX;
-      ball.lastMouseY = e.clientY;
-      ball.lastMouseTime = now;
-    }
-    ball.x = e.clientX - ball.offsetX;
-    ball.y = e.clientY - ball.offsetY;
-  }
-});
+function animate(): void {
+    updateElement();
+    requestAnimationFrame(animate);
+}
 
-// Обработчик события отпускания мыши
-canvas.addEventListener('mouseup', () => {
-  ball.isMouseDown = false;
-  ball.isDragging = false;
-});
+drawElement();
+animate();

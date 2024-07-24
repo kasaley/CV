@@ -1,12 +1,14 @@
 
 
 export const initWaterModule = () => {
-  return import('../pkg/water_simulation').then(wasm => {
+  return import('../wasm_src/pkg/water_simulation').then(wasm => {
       const canvas = document.getElementById('water') as HTMLCanvasElement;
       const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
       if(!ctx || !canvas) {
         return () => { throw { message: 'Canvas not found' }};
       }
+
+      let isStopped = true;
 
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -21,7 +23,7 @@ export const initWaterModule = () => {
       const gridSize = Math.min(canvas.width / numCols, canvas.height / numRows);
 
       // Задаем коэффициент отступов между частицами
-      const spacing = 2.5;
+      const spacing = 1.5;
 
       // Задаем коэффициент упругости пружины
       const springConstant = 0.01;
@@ -51,7 +53,18 @@ export const initWaterModule = () => {
 
       }
 
+    function stop() {
+      isStopped = true;
+    }
+
+    function start() {
+      isStopped = false;
+    }
+
       function animate() {
+          if(isStopped) {
+            return;
+          }
           particleSystem.update_particles(springConstant, damping);
           const particles = particleSystem.get_particles();
           drawParticles(particles);
@@ -59,6 +72,9 @@ export const initWaterModule = () => {
       }
 
       function handleMouseMove(event) {
+        if(isStopped) {
+          return;
+        }
           const rect = canvas.getBoundingClientRect();
           const scaleX = canvas.width / rect.width;
           const scaleY = canvas.height / rect.height;
@@ -69,6 +85,6 @@ export const initWaterModule = () => {
 
       canvas.addEventListener('mousemove', handleMouseMove);
 
-      return animate;
+      return { animate, stop, start };
   });
 }
