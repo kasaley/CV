@@ -105,91 +105,89 @@ impl ParticleSystem {
         let grid_size_spacing = self.grid_size * self.spacing;
 
         for i in 0..self.particles_x.len() {
-            let force_y = spring_constant * (self.original_y[i] - self.particles_y[i]);
-            let force_x = spring_constant * (self.original_x[i] - self.particles_x[i]);
-            self.particles_vy[i] += force_y;
-            self.particles_vx[i] += force_x;
-            self.particles_vy[i] *= 1.0 - damping;
-            self.particles_vx[i] *= 1.0 - damping;
-            self.particles_y[i] += self.particles_vy[i];
-            self.particles_x[i] += self.particles_vx[i];
+            self.update_particle(i, spring_constant, damping);
         }
 
-        // Обновление горизонтальных пружин
+        self.update_springs(spring_constant, grid_size_spacing);
+    }
+
+    fn update_particle(&mut self, i: usize, spring_constant: f64, damping: f64) {
+        let force_y = spring_constant * (self.original_y[i] - self.particles_y[i]);
+        let force_x = spring_constant * (self.original_x[i] - self.particles_x[i]);
+        self.particles_vy[i] += force_y;
+        self.particles_vx[i] += force_x;
+        self.particles_vy[i] *= 1.0 - damping;
+        self.particles_vx[i] *= 1.0 - damping;
+        self.particles_y[i] += self.particles_vy[i];
+        self.particles_x[i] += self.particles_vx[i];
+    }
+
+    fn update_springs(&mut self, spring_constant: f64, grid_size_spacing: f64) {
+        self.update_horizontal_springs(spring_constant, grid_size_spacing);
+        self.update_vertical_springs(spring_constant, grid_size_spacing);
+        self.update_diagonal_springs(spring_constant, grid_size_spacing);
+    }
+
+    fn update_spring(&mut self, idx1: usize, idx2: usize, spring_constant: f64, distance: f64) {
+        let dx = self.particles_x[idx2] - self.particles_x[idx1];
+        let dy = self.particles_y[idx2] - self.particles_y[idx1];
+        let dist = (dx * dx + dy * dy).sqrt();
+        let spring_force = (dist - distance) * spring_constant;
+        let angle = dy.atan2(dx);
+
+        self.particles_vx[idx1] += spring_force * angle.cos();
+        self.particles_vx[idx2] -= spring_force * angle.cos();
+        self.particles_vy[idx1] += spring_force * angle.sin();
+        self.particles_vy[idx2] -= spring_force * angle.sin();
+    }
+
+    fn update_horizontal_springs(&mut self, spring_constant: f64, grid_size_spacing: f64) {
         for y in 0..=self.num_rows {
             for x in 0..self.num_cols {
                 let idx = y * (self.num_cols + 1) + x;
                 let next_idx = idx + 1;
                 if next_idx < self.particles_x.len() {
-                    let dx = self.particles_x[next_idx] - self.particles_x[idx];
-                    let dy = self.particles_y[next_idx] - self.particles_y[idx];
-                    let distance = (dx * dx + dy * dy).sqrt();
-                    let spring_force = (distance - grid_size_spacing) * spring_constant;
-                    let angle = dy.atan2(dx);
-
-                    self.particles_vx[idx] += spring_force * angle.cos();
-                    self.particles_vx[next_idx] -= spring_force * angle.cos();
-                    self.particles_vy[idx] += spring_force * angle.sin();
-                    self.particles_vy[next_idx] -= spring_force * angle.sin();
+                    self.update_spring(idx, next_idx, spring_constant, grid_size_spacing);
                 }
             }
         }
+    }
 
-        // Обновление вертикальных пружин
+    fn update_vertical_springs(&mut self, spring_constant: f64, grid_size_spacing: f64) {
         for y in 0..self.num_rows {
             for x in 0..=self.num_cols {
                 let idx = y * (self.num_cols + 1) + x;
                 let next_idx = idx + (self.num_cols + 1);
                 if next_idx < self.particles_x.len() {
-                    let dx = self.particles_x[next_idx] - self.particles_x[idx];
-                    let dy = self.particles_y[next_idx] - self.particles_y[idx];
-                    let distance = (dx * dx + dy * dy).sqrt();
-                    let spring_force = (distance - grid_size_spacing) * spring_constant;
-                    let angle = dy.atan2(dx);
-
-                    self.particles_vx[idx] += spring_force * angle.cos();
-                    self.particles_vx[next_idx] -= spring_force * angle.cos();
-                    self.particles_vy[idx] += spring_force * angle.sin();
-                    self.particles_vy[next_idx] -= spring_force * angle.sin();
+                    self.update_spring(idx, next_idx, spring_constant, grid_size_spacing);
                 }
             }
         }
+    }
 
-        // Обновление диагональных пружин
+    fn update_diagonal_springs(&mut self, spring_constant: f64, grid_size_spacing: f64) {
         for y in 0..self.num_rows {
             for x in 0..self.num_cols {
                 let idx = y * (self.num_cols + 1) + x;
                 let next_idx_diagonal1 = idx + (self.num_cols + 2);
                 let next_idx_diagonal2 = idx + self.num_cols;
 
-                // Пружины по диагонали вниз вправо
                 if next_idx_diagonal1 < self.particles_x.len() {
-                    let dx = self.particles_x[next_idx_diagonal1] - self.particles_x[idx];
-                    let dy = self.particles_y[next_idx_diagonal1] - self.particles_y[idx];
-                    let distance = (dx * dx + dy * dy).sqrt();
-                    let spring_force =
-                        (distance - grid_size_spacing * f64::consts::SQRT_2) * spring_constant;
-                    let angle = dy.atan2(dx);
-
-                    self.particles_vx[idx] += spring_force * angle.cos();
-                    self.particles_vx[next_idx_diagonal1] -= spring_force * angle.cos();
-                    self.particles_vy[idx] += spring_force * angle.sin();
-                    self.particles_vy[next_idx_diagonal1] -= spring_force * angle.sin();
+                    self.update_spring(
+                        idx,
+                        next_idx_diagonal1,
+                        spring_constant,
+                        grid_size_spacing * f64::consts::SQRT_2,
+                    );
                 }
 
-                // Пружины по диагонали вниз влево
                 if next_idx_diagonal2 < self.particles_x.len() && x > 0 {
-                    let dx = self.particles_x[next_idx_diagonal2] - self.particles_x[idx];
-                    let dy = self.particles_y[next_idx_diagonal2] - self.particles_y[idx];
-                    let distance = (dx * dx + dy * dy).sqrt();
-                    let spring_force =
-                        (distance - grid_size_spacing * f64::consts::SQRT_2) * spring_constant;
-                    let angle = dy.atan2(dx);
-
-                    self.particles_vx[idx] += spring_force * angle.cos();
-                    self.particles_vx[next_idx_diagonal2] -= spring_force * angle.cos();
-                    self.particles_vy[idx] += spring_force * angle.sin();
-                    self.particles_vy[next_idx_diagonal2] -= spring_force * angle.sin();
+                    self.update_spring(
+                        idx,
+                        next_idx_diagonal2,
+                        spring_constant,
+                        grid_size_spacing * f64::consts::SQRT_2,
+                    );
                 }
             }
         }
