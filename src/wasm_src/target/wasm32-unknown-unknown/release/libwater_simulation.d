@@ -1,1 +1,0 @@
-/Users/aleksejkolpakov/Projects/frontend/my-project/src/wasm_src/target/wasm32-unknown-unknown/release/libwater_simulation.rlib: /Users/aleksejkolpakov/Projects/frontend/my-project/src/wasm_src/src/lib.rs
