@@ -6,18 +6,20 @@ const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 const canvasWidth = canvas.width;
 const canvasHeight = canvas.height;
 const PI2 = Math.PI * 2;
+const maxHoldDuration = 2000; // 2 секунды
+const lerpFactor = 0.1;
 
 // Параметры конфигурации
 interface Config {
-    gravity: number; // Сила гравитации, влияющая на падение элемента
-    damping: number; // Коэффициент затухания скорости при движении элемента
-    bounce: number; // Коэффициент отскока при столкновении с границами canvas
-    maxSpeed: number; // Максимальная скорость элемента
-    scale: number; // Множитель ускорения элемента
-    radius: number; // Радиус элемента
-    padding: number; // Отступы по краям canvas
-    threshold: number; // Порог для определения состояния покоя элемента
-    maxGoldCircles: number; // Максимальное количество золотых кружков
+    gravity: number;
+    damping: number;
+    bounce: number;
+    maxSpeed: number;
+    scale: number;
+    radius: number;
+    padding: number;
+    threshold: number;
+    maxGoldCircles: number;
 }
 
 const config: Config = {
@@ -33,11 +35,11 @@ const config: Config = {
 };
 
 interface Element {
-    x: number; // координаты элемента
-    y: number; // координаты элемента
-    radius: number; // радиус элемента
-    vx: number; // скорость по горизонтали
-    vy: number; // ускорение по вертикали
+    x: number;
+    y: number;
+    radius: number;
+    vx: number;
+    vy: number;
 }
 
 const element: Element = { x: canvasWidth / 2, y: canvasHeight - config.padding - config.radius, radius: config.radius, vx: 0, vy: 0 };
@@ -50,6 +52,16 @@ interface GoldCircle {
 
 let goldCircles: GoldCircle[] = [];
 let score = 0;
+let isMouseOverElement = false;
+let mouseX = 0;
+let mouseY = 0;
+let currentAngle = 0;
+let arrowColor = 'blue';
+let isMouseDown = false;
+let mouseDownStartTime = 0;
+let mouseHoldDuration = 0;
+
+
 
 function drawElement(): void {
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -64,6 +76,11 @@ function drawElement(): void {
     ctx.shadowOffsetY = 5;
     ctx.fill();
     ctx.closePath();
+
+    // Рисуем стрелку, если мышь над элементом
+    drawArrow();
+
+
     // Рисуем золотые кружки
     goldCircles.forEach(circle => {
         ctx.beginPath();
@@ -87,6 +104,52 @@ function drawElement(): void {
     ctx.fillText(`Score: ${score}`, 10, 30);
 }
 
+function drawArrow(): void {
+    const { angle } = calculateDistanceAndAngle(mouseX, mouseY);
+    currentAngle = lerp(currentAngle, angle + Math.PI, lerpFactor); // Указание в противоположную сторону
+    const arrowLength = 10;
+    const arrowX = element.x + Math.cos(currentAngle) * (element.radius + 20);
+    const arrowY = element.y + Math.sin(currentAngle) * (element.radius + 20);
+
+    if (isMouseDown) {
+        mouseHoldDuration = Math.min(Date.now() - mouseDownStartTime, maxHoldDuration);
+    } else {
+        mouseHoldDuration = 0;
+    }
+    arrowColor = interpolateColor([0, 0, 255], [255, 0, 0], Math.min(mouseHoldDuration / maxHoldDuration, 1));
+
+    ctx.beginPath();
+    ctx.moveTo(element.x, element.y);
+    ctx.lineTo(arrowX, arrowY);
+    ctx.strokeStyle = arrowColor;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.closePath();
+
+    const arrowTipX = element.x + Math.cos(currentAngle) * (element.radius + 20 + arrowLength);
+    const arrowTipY = element.y + Math.sin(currentAngle) * (element.radius + 20 + arrowLength);
+
+    ctx.beginPath();
+    ctx.moveTo(arrowTipX, arrowTipY);
+    ctx.lineTo(arrowX - arrowLength * Math.cos(currentAngle - Math.PI / 8), arrowY - arrowLength * Math.sin(currentAngle - Math.PI / 8));
+    ctx.lineTo(arrowX - arrowLength * Math.cos(currentAngle + Math.PI / 8), arrowY - arrowLength * Math.sin(currentAngle + Math.PI / 8));
+    ctx.lineTo(arrowTipX, arrowTipY);
+    ctx.fillStyle = arrowColor;
+    ctx.fill();
+    ctx.closePath();
+}
+
+function lerp(start: number, end: number, t: number): number {
+    return start * (1 - t) + end * t;
+}
+
+function interpolateColor(color1: [number, number, number], color2: [number, number, number], factor: number): string {
+    const r = Math.round(lerp(color1[0], color2[0], factor));
+    const g = Math.round(lerp(color1[1], color2[1], factor));
+    const b = Math.round(lerp(color1[2], color2[2], factor));
+    return `rgb(${r}, ${g}, ${b})`;
+}
+
 function updateElement(): void {
     if (Math.abs(element.vx) > config.threshold || Math.abs(element.vy) > config.threshold) {
         element.vy += config.gravity;
@@ -99,7 +162,7 @@ function updateElement(): void {
         // Столкновение с границами canvas
         handleCollision();
 
-        // Проверка на столкновение с золотыми кружками
+        // Проверка на столкновение a золотыми кружками
         checkCollisionWithGoldCircles();
 
         drawElement();
@@ -124,15 +187,15 @@ function handleCollision(): void {
     }
 }
 
-// Вспомогательная функция для расчета расстояния и угла
 function calculateDistanceAndAngle(clickX: number, clickY: number) {
-  const el = new ElementWasm(element.x, element.y)
-  return el.calculate_distance_and_angle(clickX, clickY);
+    const el = new ElementWasm(element.x, element.y)
+    return el.calculate_distance_and_angle(clickX, clickY);
 }
 
-function calculateVelocity(clickX: number, clickY: number) {
-    const { distance, angle } = calculateDistanceAndAngle(clickX, clickY);
-    const speed = Math.min(distance / 10, config.maxSpeed);
+function calculateVelocity(clickX: number, clickY: number, holdDuration: number) {
+    const { angle } = calculateDistanceAndAngle(clickX, clickY);
+    const normalizedHoldDuration = Math.min(holdDuration, maxHoldDuration) / maxHoldDuration;
+    const speed = normalizedHoldDuration * config.maxSpeed;
     element.vx = -(speed * Math.cos(angle)) * config.scale;
     element.vy = speed * Math.sin(angle) * config.scale;
 }
@@ -142,12 +205,37 @@ function isClickInsideElement(clickX: number, clickY: number): boolean {
     return distance <= element.radius;
 }
 
+canvas.addEventListener('mousemove', (event: MouseEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = event.clientX - rect.left;
+    mouseY = event.clientY - rect.top;
+    isMouseOverElement = isClickInsideElement(mouseX, mouseY);
+
+
+    drawElement();
+});
+
 canvas.addEventListener('mousedown', (event: MouseEvent) => {
     const rect = canvas.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
     const clickY = event.clientY - rect.top;
     if (isClickInsideElement(clickX, clickY)) {
-        calculateVelocity(clickX, clickY);
+      isMouseDown = true;
+      mouseDownStartTime = Date.now();
+      mouseHoldDuration = 0.0001;
+    }
+});
+
+canvas.addEventListener('mouseup', (event: MouseEvent) => {
+    if (isMouseDown) {
+        const rect = canvas.getBoundingClientRect();
+        const clickX = event.clientX - rect.left;
+        const clickY = event.clientY - rect.top;
+        mouseHoldDuration = Math.min(Date.now() - mouseDownStartTime, maxHoldDuration);
+        if (isClickInsideElement(clickX, clickY)) {
+            calculateVelocity(clickX, clickY, mouseHoldDuration);
+        }
+        isMouseDown = false;
     }
 });
 
@@ -162,31 +250,34 @@ function checkCollisionWithGoldCircles(): void {
 
             // Отталкивание мяча
             const angle = Math.atan2(dy, dx);
-            const force = 2; // Сила отталкивания
+            const force = 2;
             element.vx = -Math.cos(angle) * force;
             element.vy = -Math.sin(angle) * force;
 
-            // Удаление золотого кружка после столкновения
             goldCircles.splice(index, 1);
         }
     });
 }
 
 function generateRandomGoldCircle(): void {
-    if (goldCircles.length < config.maxGoldCircles) {
-        const radius = 5;
-        const x = Math.random() * (canvasWidth - 2 * config.padding - 2 * radius) + config.padding + radius;
-        const y = Math.random() * (canvasHeight - 2 * config.padding - 2 * radius) + config.padding + radius;
-        goldCircles.push({ x, y, radius });
-    }
+  if (goldCircles.length < config.maxGoldCircles) {
+    const radius = 5;
+    const x = Math.random() * (canvasWidth - 2 * config.padding - 2 * radius) + config.padding + radius;
+    const y = Math.random() * (canvasHeight - 2 * config.padding - 2 * radius) + config.padding + radius;
+    goldCircles.push({ x, y, radius });
+  }
 }
 
 function animate(): void {
-    updateElement();
-    requestAnimationFrame(animate);
+  updateElement();
+
+  if(mouseHoldDuration) {
+    drawElement();
+  }
+  requestAnimationFrame(animate);
 }
 
-setInterval(generateRandomGoldCircle, 3000); // Генерация новых кружков каждые 3 секунды
+setInterval(generateRandomGoldCircle, 3000);
 
 drawElement();
 animate();
