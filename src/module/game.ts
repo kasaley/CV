@@ -8,6 +8,7 @@ const canvasHeight = canvas.height;
 const PI2 = Math.PI * 2;
 const maxHoldDuration = 2000; // 2 секунды
 const lerpFactor = 0.1;
+const mouseHoldSpeedMultiplier = 0.8;
 
 // Параметры конфигурации
 interface Config {
@@ -60,7 +61,10 @@ let arrowColor = 'blue';
 let isMouseDown = false;
 let mouseDownStartTime = 0;
 let mouseHoldDuration = 0;
-
+let lastMouseX = 0;
+let lastMouseY = 0;
+let mouseSpeed = 0;
+const speedThreshold = 15; // Порог скорости для отбивания шарика
 
 
 function drawElement(): void {
@@ -169,6 +173,7 @@ function updateElement(): void {
     }
 }
 
+// Обновленная функция handleCollision
 function handleCollision(): void {
     if (element.x + element.radius > canvasWidth - config.padding) {
         element.x = canvasWidth - element.radius - config.padding;
@@ -185,6 +190,14 @@ function handleCollision(): void {
         element.y = element.radius + config.padding;
         element.vy = -element.vy * config.bounce;
     }
+
+    // Проверка на столкновение с мышью при высокой скорости
+    if (mouseSpeed > speedThreshold && isMouseOverElement) {
+        const angle = Math.atan2(mouseY - element.y, mouseX - element.x);
+        const force = 40; // Сила отталкивания от мыши
+        element.vx = -Math.cos(angle) * force;
+        element.vy = -Math.sin(angle) * force;
+    }
 }
 
 function calculateDistanceAndAngle(clickX: number, clickY: number) {
@@ -195,7 +208,7 @@ function calculateDistanceAndAngle(clickX: number, clickY: number) {
 function calculateVelocity(clickX: number, clickY: number, holdDuration: number) {
     const { angle } = calculateDistanceAndAngle(clickX, clickY);
     const normalizedHoldDuration = Math.min(holdDuration, maxHoldDuration) / maxHoldDuration;
-    const speed = normalizedHoldDuration * config.maxSpeed;
+    const speed = (normalizedHoldDuration * mouseHoldSpeedMultiplier) * config.maxSpeed;
     element.vx = -(speed * Math.cos(angle)) * config.scale;
     element.vy = speed * Math.sin(angle) * config.scale;
 }
@@ -205,12 +218,30 @@ function isClickInsideElement(clickX: number, clickY: number): boolean {
     return distance <= element.radius;
 }
 
+// Обновленный обработчик события mousemove
 canvas.addEventListener('mousemove', (event: MouseEvent) => {
     const rect = canvas.getBoundingClientRect();
+    const prevMouseX = mouseX;
+    const prevMouseY = mouseY;
+
     mouseX = event.clientX - rect.left;
     mouseY = event.clientY - rect.top;
+
+    // Рассчитываем скорость мыши
+    const deltaX = mouseX - prevMouseX;
+    const deltaY = mouseY - prevMouseY;
+    mouseSpeed = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
     isMouseOverElement = isClickInsideElement(mouseX, mouseY);
 
+    if (isMouseOverElement) {
+        if (isMouseDown) {
+            mouseHoldDuration = Math.min(Date.now() - mouseDownStartTime, maxHoldDuration);
+        } else {
+            mouseHoldDuration = 0;
+        }
+        arrowColor = interpolateColor([0, 0, 255], [255, 0, 0], Math.min(mouseHoldDuration / maxHoldDuration, 1));
+    }
 
     drawElement();
 });
@@ -220,12 +251,12 @@ canvas.addEventListener('mousedown', (event: MouseEvent) => {
     const clickX = event.clientX - rect.left;
     const clickY = event.clientY - rect.top;
     if (isClickInsideElement(clickX, clickY)) {
-      isMouseDown = true;
-      mouseDownStartTime = Date.now();
-      mouseHoldDuration = 0.0001;
+        isMouseDown = true;
+        mouseDownStartTime = Date.now();
     }
 });
 
+// Обновленный обработчик события mouseup
 canvas.addEventListener('mouseup', (event: MouseEvent) => {
     if (isMouseDown) {
         const rect = canvas.getBoundingClientRect();
